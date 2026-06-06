@@ -1373,9 +1373,10 @@ async function runOmniSearch(q) {
   try {
     tmdbResults = await tmdbSearch(q, 'multi');
     // Filter out items already in local list
-    omniTmdbResults = tmdbResults.filter(r =>
-      !items.find(i => i.tmdb_id === r.id && i.type === (r.media_type === 'movie' ? 'movie' : 'tv'))
-    ).slice(0, 6);
+    omniTmdbResults = tmdbResults.map(r => ({
+      ...r,
+      _type: r.media_type === 'movie' ? 'movie' : r.media_type === 'tv' ? 'tv' : 'movie'
+    })).slice(0, 8);
   } catch {}
 
   renderOmniDropdown(localMatches, omniTmdbResults, q);
@@ -1411,31 +1412,47 @@ function renderOmniDropdown(local, tmdb, q) {
 
   if (tmdb.length) {
     if (local.length) html += '<div class="omni-divider"></div>';
-    html += '<div class="omni-section-label">Agregar a tu lista</div>';
-    html += tmdb.map((r, idx) => {
-      const type = r.media_type === 'movie' ? 'movie' : 'tv';
-      const title = r.title || r.name;
-      const year = (r.release_date || r.first_air_date || '').slice(0, 4);
-      const poster = r.poster_path
-        ? `<img src="${TMDB_IMG}w92${r.poster_path}" alt="" />`
-        : `<div class="omni-thumb"></div>`;
-      const starsHtml = Array.from({length: 5}, (_, i) =>
-        `<span class="qs" data-idx="${idx}" data-val="${(i+1)*2}"
-          onmouseenter="hoverQuickStars(this)" onmouseleave="resetQuickStars(${idx})"
-          onclick="quickAdd(event, ${r.id}, '${type}', ${(i+1)*2})">★</span>`
-      ).join('');
-      return `<div class="omni-item" id="omni-tmdb-${idx}">
-        ${poster}
-        <div class="omni-info">
-          <div class="omni-title">${title}</div>
-          <div class="omni-meta">${type === 'movie' ? '🎬' : '📺'} ${year}</div>
-        </div>
-        <div class="omni-actions">
-          <div class="quick-stars" id="qs-${idx}">${starsHtml}</div>
-          <button class="btn-omni-add" onclick="quickAdd(event, ${r.id}, '${type}', null)">+ Agregar</button>
-        </div>
-      </div>`;
-    }).join('');
+
+    const toAdd = tmdb.filter(r => !items.find(i => i.tmdb_id === r.id && i.type === r._type));
+    const alreadyIn = tmdb.filter(r => items.find(i => i.tmdb_id === r.id && i.type === r._type));
+
+    // Show already-in-list items from TMDB results (edge case: not in local search)
+    if (alreadyIn.length) {
+      alreadyIn.forEach(r => {
+        const existing = items.find(i => i.tmdb_id === r.id && i.type === r._type);
+        if (existing && !local.find(l => l.id === existing.id)) {
+          local.push(existing);
+        }
+      });
+    }
+
+    if (toAdd.length) {
+      html += '<div class="omni-section-label">Agregar a tu lista</div>';
+      html += toAdd.map((r, idx) => {
+        const type = r._type;
+        const title = r.title || r.name;
+        const year = (r.release_date || r.first_air_date || '').slice(0, 4);
+        const poster = r.poster_path
+          ? `<img src="${TMDB_IMG}w92${r.poster_path}" alt="" />`
+          : `<div class="omni-thumb"></div>`;
+        const starsHtml = Array.from({length: 5}, (_, i) =>
+          `<span class="qs" data-idx="${idx}" data-val="${(i+1)*2}"
+            onmouseenter="hoverQuickStars(this)" onmouseleave="resetQuickStars(${idx})"
+            onclick="quickAdd(event, ${r.id}, '${type}', ${(i+1)*2})">★</span>`
+        ).join('');
+        return `<div class="omni-item" id="omni-tmdb-${idx}">
+          ${poster}
+          <div class="omni-info">
+            <div class="omni-title">${title}</div>
+            <div class="omni-meta">${type === 'movie' ? '🎬' : '📺'} ${year}</div>
+          </div>
+          <div class="omni-actions">
+            <div class="quick-stars" id="qs-${idx}">${starsHtml}</div>
+            <button class="btn-omni-add" onclick="quickAdd(event, ${r.id}, '${type}', null)">+ Agregar</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
   }
 
   omniDropdown.innerHTML = html;
