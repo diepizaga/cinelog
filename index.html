@@ -1386,6 +1386,7 @@ function openDetailModal(item, isEdit) {
       </div>
       <div class="detail-actions">
         ${isEdit ? `<button class="btn btn-danger" onclick="confirmDelete('${item.id}')">🗑 Eliminar</button>` : ''}
+        ${isEdit ? `<button class="btn btn-secondary" onclick="replaceMovie('${item.id}', '${item.title.replace(/'/g,"\\'")}')">🔄 No es esta</button>` : ''}
         <button class="btn btn-secondary" onclick="closeModal('modal-detail')">Cancelar</button>
         <button class="btn btn-primary" onclick="saveDetail(${isEdit})">💾 Guardar</button>
       </div>
@@ -1430,6 +1431,18 @@ async function confirmDelete(id) {
   await deleteItem(id);
   closeModal('modal-detail');
   showToast('Eliminado', 'success');
+}
+
+async function replaceMovie(id, title) {
+  if (!confirm(`¿Querés reemplazar "${title}"?\nSe va a borrar y podés buscar la correcta.`)) return;
+  await deleteItem(id);
+  closeModal('modal-detail');
+  // Open omnisearch pre-filled
+  document.getElementById('omni-input').value = title;
+  document.getElementById('omni-clear').style.display = 'block';
+  document.getElementById('omni-input').focus();
+  runOmniSearch(title);
+  showToast('Buscá la película correcta en el buscador', 'success');
 }
 
 // ===================== IMPORT =====================
