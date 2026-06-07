@@ -874,33 +874,37 @@ select option { background: var(--bg2); color: var(--text); }
 <body>
 
 <!-- AUTH SCREEN -->
-<div id="auth-screen" style="display:none!important">
+<div id="auth-screen">
   <div class="auth-card">
     <div class="auth-logo">CineLog</div>
     <div class="auth-subtitle">Tu historial de películas y series</div>
 
-    <!-- Step 1: email -->
+    <!-- Step 1: login / signup -->
     <div class="auth-step active" id="auth-step-email">
-      <h2>Ingresá tu email</h2>
-      <p>Te mandamos un link mágico para entrar — sin contraseña.</p>
+      <h2 id="auth-title">Iniciá sesión</h2>
+      <p id="auth-subtitle-text">Ingresá tu email y contraseña.</p>
       <input class="auth-input" type="email" id="auth-email" placeholder="tucorreo@email.com" autocomplete="email" />
-      <button class="auth-btn" onclick="sendMagicLink()">Continuar →</button>
-      <div class="auth-msg" id="auth-msg-email"></div>
+      <input class="auth-input" type="password" id="auth-password" placeholder="Contraseña" autocomplete="current-password" style="margin-top:8px" />
+      <input class="auth-input" type="text" id="auth-username" placeholder="Tu nombre (solo primera vez)" maxlength="20" style="margin-top:8px;display:none" />
+      <button class="auth-btn" id="auth-submit-btn" onclick="handleAuth()">Entrar →</button>
+      <div style="text-align:center;margin-top:12px">
+        <a href="#" id="auth-toggle-link" onclick="toggleAuthMode();return false" style="font-size:13px;color:var(--accent)">¿No tenés cuenta? Registrate</a>
+      </div>
+      <div class="auth-msg" id="auth-msg-email" style="margin-top:10px"></div>
     </div>
 
-    <!-- Step 2: check email -->
+    <!-- Step 2: unused, kept for profile creation flow -->
     <div class="auth-step" id="auth-step-check">
       <h2>¡Revisá tu email!</h2>
-      <p>Te mandamos un link. Hacé click ahí y volvés directo a CineLog.<br><br>
-      <span style="font-size:12px;color:var(--text3)">Si no llega, revisá spam.</span></p>
-      <button class="auth-btn-secondary" onclick="showStep('email')">← Volver</button>
+      <p>Te mandamos un link.<br><span style="font-size:12px;color:var(--text3)">Si no llega, revisá spam.</span></p>
+      <button class="auth-btn-secondary" onclick="showAuthStep('email')">← Volver</button>
     </div>
 
     <!-- Step 3: create profile (first time) -->
     <div class="auth-step" id="auth-step-profile">
       <h2>¡Bienvenido!</h2>
       <p>Elegí cómo te van a ver tus amigos en el grupo.</p>
-      <input class="auth-input" type="text" id="auth-username" placeholder="Tu nombre o apodo" maxlength="20" />
+      <input class="auth-input" type="text" id="auth-username-profile" placeholder="Tu nombre o apodo" maxlength="20" />
       <div class="avatar-picker" id="avatar-picker"></div>
       <button class="auth-btn" onclick="createProfile()">Entrar a CineLog →</button>
       <div class="auth-msg" id="auth-msg-profile"></div>
@@ -2656,45 +2660,112 @@ function getAuthHeaders() {
   };
 }
 
-async function initAuth() {
-  // Handle magic link redirect (hash contains access_token)
-  const hash = window.location.hash;
-  if (hash.includes('access_token')) {
-    const params = new URLSearchParams(hash.slice(1));
-    const access_token = params.get('access_token');
-    const refresh_token = params.get('refresh_token');
-    if (access_token) {
-      try {
-        const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${access_token}` }
-        });
-        if (resp.ok) {
-          currentUser = await resp.json();
-          currentSession = { access_token, refresh_token };
-          localStorage.setItem('cinelog_session', JSON.stringify({ access_token, refresh_token, user: currentUser }));
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-      } catch(e) {}
+let authMode = 'login'; // 'login' | 'signup'
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  const isSignup = authMode === 'signup';
+  document.getElementById('auth-title').textContent = isSignup ? 'Crear cuenta' : 'Iniciá sesión';
+  document.getElementById('auth-subtitle-text').textContent = isSignup ? 'Elegí una contraseña para tu cuenta.' : 'Ingresá tu email y contraseña.';
+  document.getElementById('auth-username').style.display = isSignup ? 'block' : 'none';
+  document.getElementById('auth-submit-btn').textContent = isSignup ? 'Crear cuenta →' : 'Entrar →';
+  document.getElementById('auth-toggle-link').textContent = isSignup ? '¿Ya tenés cuenta? Iniciá sesión' : '¿No tenés cuenta? Registrate';
+  document.getElementById('auth-msg-email').textContent = '';
+  if (isSignup) document.getElementById('auth-password').setAttribute('autocomplete', 'new-password');
+  else document.getElementById('auth-password').setAttribute('autocomplete', 'current-password');
+}
+
+async function handleAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const nameInput = document.getElementById('auth-username');
+  const name = nameInput.value.trim();
+  const msg = document.getElementById('auth-msg-email');
+  const btn = document.getElementById('auth-submit-btn');
+
+  if (!email || !email.includes('@')) { msg.textContent = 'Ingresá un email válido.'; msg.style.color = 'var(--rt-fresh)'; return; }
+  if (password.length < 6) { msg.textContent = 'La contraseña debe tener al menos 6 caracteres.'; msg.style.color = 'var(--rt-fresh)'; return; }
+  if (authMode === 'signup' && !name) { msg.textContent = 'Ingresá tu nombre.'; msg.style.color = 'var(--rt-fresh)'; return; }
+
+  btn.disabled = true;
+  btn.textContent = authMode === 'signup' ? 'Creando cuenta...' : 'Entrando...';
+  msg.textContent = '';
+
+  try {
+    if (authMode === 'signup') {
+      // Sign up
+      const resp = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        msg.textContent = data.error?.message || data.msg || 'Error al crear cuenta.';
+        msg.style.color = 'var(--rt-fresh)';
+        return;
+      }
+      // Auto sign in after signup
+      await signInWithPassword(email, password, name);
+    } else {
+      await signInWithPassword(email, password, null);
     }
+  } catch(e) {
+    msg.textContent = 'Error de red. Intentá de nuevo.';
+    msg.style.color = 'var(--rt-fresh)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'signup' ? 'Crear cuenta →' : 'Entrar →';
+  }
+}
+
+async function signInWithPassword(email, password, nameForProfile) {
+  const msg = document.getElementById('auth-msg-email');
+  const resp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await resp.json();
+  if (!resp.ok || data.error) {
+    msg.textContent = data.error_description || data.msg || 'Email o contraseña incorrectos.';
+    msg.style.color = 'var(--rt-fresh)';
+    return;
+  }
+  currentSession = { access_token: data.access_token, refresh_token: data.refresh_token };
+  currentUser = data.user;
+  localStorage.setItem('cinelog_session', JSON.stringify({ access_token: data.access_token, refresh_token: data.refresh_token, user: data.user }));
+
+  if (nameForProfile) {
+    // Create profile immediately on signup
+    await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ id: currentUser.id, display_name: nameForProfile, email: currentUser.email })
+    });
+    currentUser._profile = { display_name: nameForProfile, email: currentUser.email };
   }
 
+  await onSignedIn();
+  await loadItems();
+}
+
+async function initAuth() {
   // Check stored session
-  if (!currentUser) {
-    const stored = localStorage.getItem('cinelog_session');
-    if (stored) {
-      try {
-        const { access_token, refresh_token, user } = JSON.parse(stored);
-        const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-          headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${access_token}` }
-        });
-        if (resp.ok) {
-          currentUser = user;
-          currentSession = { access_token, refresh_token };
-        } else {
-          localStorage.removeItem('cinelog_session');
-        }
-      } catch(e) { localStorage.removeItem('cinelog_session'); }
-    }
+  const stored = localStorage.getItem('cinelog_session');
+  if (stored) {
+    try {
+      const { access_token, refresh_token, user } = JSON.parse(stored);
+      const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        headers: { 'apikey': SUPABASE_ANON, 'Authorization': `Bearer ${access_token}` }
+      });
+      if (resp.ok) {
+        currentUser = user;
+        currentSession = { access_token, refresh_token };
+      } else {
+        localStorage.removeItem('cinelog_session');
+      }
+    } catch(e) { localStorage.removeItem('cinelog_session'); }
   }
 
   if (currentUser) {
@@ -2785,7 +2856,8 @@ async function sendMagicLink() {
 }
 
 async function createProfile() {
-  const name = document.getElementById('auth-username').value.trim();
+  const nameEl = document.getElementById('auth-username-profile');
+  const name = nameEl ? nameEl.value.trim() : '';
   if (!name) { showToast('Ingresá tu nombre', 'error'); return; }
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
@@ -2803,6 +2875,8 @@ async function createProfile() {
     showToast('Error al guardar perfil', 'error');
   }
 }
+
+async function sendMagicLink() { handleAuth(); } // legacy alias
 
 function toggleUserMenu() {
   const dd = document.getElementById('user-dropdown');
@@ -3118,7 +3192,10 @@ async function renderCompare() {
 }
 
 // ===================== INIT =====================
-loadItems();
+(async () => {
+  await initAuth();
+  if (currentUser) await loadItems();
+})();
 </script>
 </body>
 </html>
