@@ -2743,10 +2743,7 @@ async function renderCompare() {
 }
 
 // ===================== INIT =====================
-(async () => {
-  await initAuth();
-  if (currentUser) await loadItems();
-})();
+loadItems();
 </script>
 </body>
 </html>
