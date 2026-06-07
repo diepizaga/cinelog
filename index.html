@@ -1010,17 +1010,18 @@ select option { background: var(--bg2); color: var(--text); }
 
     <!-- GRID / INSIGHTS / RECS -->
     <div id="tab-list">
+      <!-- Insights panel: visible only on Películas / Series / Libros tabs -->
+      <div id="type-insights-panel" style="display:none;margin-bottom:32px"></div>
       <div id="grid"></div>
       <div id="empty">
         <div class="empty-icon">🎭</div>
         <h3>No hay nada acá todavía</h3>
-        <p>Usá el botón "+ Agregar" para buscar películas y series</p>
+        <p>Usá el botón "+ Agregar" para buscar películas, series o libros</p>
       </div>
     </div>
 
     <div id="tab-discover" style="display:none">
-      <div class="insights-grid" id="insights-content" style="margin-bottom:32px"></div>
-      <!-- Sub-tabs Descubrí -->
+      <!-- Descubrí: SOLO recomendaciones, sub-tabs por tipo -->
       <div class="discover-tabs">
         <button class="discover-tab active" data-dtab="movies" onclick="switchDiscoverTab('movies')">🎬 Películas</button>
         <button class="discover-tab" data-dtab="series" onclick="switchDiscoverTab('series')">📺 Series</button>
@@ -1345,9 +1346,16 @@ function renderAll() {
   updateStats();
   updateGenreFilter();
   if (filterTab === 'discover') {
-    renderInsights();
     renderRecs();
     return;
+  }
+  // Show type-specific insights panel for Películas / Series / Libros tabs
+  const insightsPanel = document.getElementById('type-insights-panel');
+  if (filterTab === 'movie' || filterTab === 'tv' || filterTab === 'book') {
+    insightsPanel.style.display = 'block';
+    renderInsightsForType(filterTab);
+  } else {
+    insightsPanel.style.display = 'none';
   }
   renderGrid();
 }
@@ -1416,9 +1424,12 @@ function cardHTML(item) {
 }
 
 // ===================== INSIGHTS =====================
-function renderInsights() {
-  const watched = items.filter(i => i.status !== 'watchlist' && i.my_rating);
-  const all = items.filter(i => i.status !== 'watchlist');
+function insightsHTML(typeFilter) {
+  // typeFilter: 'movie' | 'tv' | 'book' | null (all)
+  const all = items.filter(i => i.status !== 'watchlist' && (typeFilter ? i.type === typeFilter : true));
+  const watched = all.filter(i => i.my_rating);
+
+  if (!all.length) return `<div class="insight-card" style="grid-column:1/-1"><p style="color:var(--text3);font-size:13px;text-align:center;padding:20px">Agregá contenido para ver estadísticas.</p></div>`;
 
   // Genre distribution
   const genreCount = {};
@@ -1434,34 +1445,73 @@ function renderInsights() {
   // Top rated
   const topRated = [...watched].sort((a,b) => parseFloat(b.my_rating)-parseFloat(a.my_rating)).slice(0,5);
 
-  // IMDb diff
-  const withImdb = watched.filter(i => i.imdb_rating && i.my_rating);
-  const diffs = withImdb.map(i => ({ title: i.title, diff: parseFloat(i.my_rating) - parseFloat(i.imdb_rating), my: i.my_rating, imdb: i.imdb_rating }));
-  const overrated = [...diffs].sort((a,b) => a.diff-b.diff).slice(0,3); // I rated lower
-  const underrated = [...diffs].sort((a,b) => b.diff-a.diff).slice(0,3); // I rated higher
+  // Poster for top rated (books use cover directly, others use TMDB)
+  const topRatedHTML = topRated.map((item, idx) => {
+    const isBook = item.type === 'book';
+    const img = item.poster_path
+      ? `<img src="${isBook ? item.poster_path : TMDB_IMG+'w92'+item.poster_path}" alt="" style="${isBook ? 'object-fit:contain;background:#f0ece4' : ''}" />`
+      : `<div style="width:40px;height:60px;background:var(--bg3);border-radius:4px;display:flex;align-items:center;justify-content:center">${isBook ? '📖' : '🎬'}</div>`;
+    return `<div class="tr-item" onclick="openDetail('${item.id}')" style="cursor:pointer">
+      <span class="tr-rank">${idx+1}</span>
+      ${img}
+      <div class="tr-info">
+        <div class="tr-title">${item.title}</div>
+        ${isBook && item.author ? `<div style="font-size:10px;color:var(--text3)">✍️ ${item.author.split(',')[0]}</div>` : ''}
+        <div class="tr-rating">${'★'.repeat(Math.round(item.my_rating/2))} ${item.my_rating}/10</div>
+      </div>
+    </div>`;
+  }).join('') || '<p style="color:var(--text3);font-size:13px">Calificá contenido para ver ranking</p>';
 
-  document.getElementById('insights-content').innerHTML = `
+  // IMDb diff (movies/series only)
+  let imdbCard = '';
+  if (typeFilter !== 'book') {
+    const withImdb = watched.filter(i => i.imdb_rating && i.my_rating);
+    const diffs = withImdb.map(i => ({ title: i.title, diff: parseFloat(i.my_rating) - parseFloat(i.imdb_rating), my: i.my_rating, imdb: i.imdb_rating }));
+    if (diffs.length >= 3) {
+      const overrated = [...diffs].sort((a,b) => a.diff-b.diff).slice(0,3);
+      const underrated = [...diffs].sort((a,b) => b.diff-a.diff).slice(0,3);
+      imdbCard = `<div class="insight-card">
+        <h3>Donde discrepo con IMDb</h3>
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Sobreestimadas por IMDb (yo les puse menos)</div>
+          ${overrated.map(d => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>${d.title}</span><span style="color:var(--text3)">yo ${d.my} · imdb ${d.imdb}</span></div>`).join('')}
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Subestimadas por IMDb (yo les puse más)</div>
+          ${underrated.map(d => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>${d.title}</span><span style="color:var(--text3)">yo ${d.my} · imdb ${d.imdb}</span></div>`).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  // En números
+  const avg = watched.length ? (watched.reduce((s,i) => s + parseFloat(i.my_rating), 0) / watched.length).toFixed(1) : '—';
+  let numbersExtra = '';
+  if (typeFilter === 'book') {
+    const totalPages = all.reduce((s, i) => s + (parseInt(i.runtime) || 0), 0);
+    const topAuthorCount = {};
+    all.forEach(b => { if(b.author) b.author.split(',').forEach(a => { const k=a.trim(); if(k) topAuthorCount[k]=(topAuthorCount[k]||0)+1; }); });
+    const topAuthor = Object.entries(topAuthorCount).sort((a,b)=>b[1]-a[1])[0];
+    numbersExtra = `
+      ${totalPages ? `<div><div style="font-size:20px;font-weight:700;color:var(--accent)">${totalPages.toLocaleString()}</div><div style="font-size:12px;color:var(--text3)">páginas leídas</div></div>` : ''}
+      ${topAuthor ? `<div><div style="font-size:14px;font-weight:700;color:var(--text2)">${topAuthor[0].split(' ').pop()}</div><div style="font-size:12px;color:var(--text3)">autor favorito (${topAuthor[1]} libros)</div></div>` : ''}`;
+  } else {
+    const runtime = all.filter(i=>i.runtime).reduce((s,i)=>s+(parseInt(i.runtime)||0),0);
+    numbersExtra = runtime ? `<div><div style="font-size:16px;font-weight:700;color:var(--accent)">${Math.round(runtime/60)}h</div><div style="font-size:12px;color:var(--text3)">de contenido visto</div></div>` : '';
+  }
+
+  return `
     <div class="insight-card">
-      <h3>Géneros más vistos</h3>
+      <h3>${typeFilter === 'book' ? 'Géneros más leídos' : 'Géneros más vistos'}</h3>
       ${topGenres.map(([g, c]) => `
         <div class="genre-bar">
           <div class="gb-label"><span>${g}</span><span style="color:var(--text3)">${c}</span></div>
           <div class="gb-track"><div class="gb-fill" style="width:${(c/maxG)*100}%"></div></div>
-        </div>`).join('') || '<p style="color:var(--text3);font-size:13px">Agregá contenido para ver estadísticas</p>'}
+        </div>`).join('')}
     </div>
     <div class="insight-card">
       <h3>Mis top calificados</h3>
-      <div class="top-rated-list">
-        ${topRated.map((i, idx) => `
-          <div class="tr-item">
-            <span class="tr-rank">${idx+1}</span>
-            ${i.poster_path ? `<img src="${TMDB_IMG}w92${i.poster_path}" alt="" />` : '<div style="width:40px;height:60px;background:var(--bg3);border-radius:4px"></div>'}
-            <div class="tr-info">
-              <div class="tr-title">${i.title}</div>
-              <div class="tr-rating">${'★'.repeat(Math.round(i.my_rating/2))} ${i.my_rating}/10</div>
-            </div>
-          </div>`).join('') || '<p style="color:var(--text3);font-size:13px">Calificá contenido para ver ranking</p>'}
-      </div>
+      <div class="top-rated-list">${topRatedHTML}</div>
     </div>
     <div class="insight-card">
       <h3>Distribución de calificaciones</h3>
@@ -1476,37 +1526,22 @@ function renderInsights() {
     <div class="insight-card">
       <h3>En números</h3>
       <div class="insight-number">${all.length}</div>
-      <div class="insight-subtitle">títulos vistos</div>
-      <div style="margin-top:16px;display:flex;gap:20px">
-        <div>
-          <div style="font-size:20px;font-weight:700;color:var(--gold)">${all.filter(i=>i.type==='movie').length}</div>
-          <div style="font-size:12px;color:var(--text3)">películas</div>
-        </div>
-        <div>
-          <div style="font-size:20px;font-weight:700;color:var(--blue)">${all.filter(i=>i.type==='tv').length}</div>
-          <div style="font-size:12px;color:var(--text3)">series</div>
-        </div>
+      <div class="insight-subtitle">${typeFilter === 'movie' ? 'películas vistas' : typeFilter === 'tv' ? 'series vistas' : typeFilter === 'book' ? 'libros leídos' : 'títulos vistos'}</div>
+      <div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap">
+        <div><div style="font-size:18px;font-weight:700;color:var(--gold)">${avg}★</div><div style="font-size:12px;color:var(--text3)">promedio</div></div>
+        ${numbersExtra}
       </div>
     </div>
-    ${diffs.length >= 3 ? `
-    <div class="insight-card">
-      <h3>Donde discrepo con IMDb</h3>
-      <div style="margin-bottom:12px">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Sobreestimadas por IMDb (yo les puse menos)</div>
-        ${overrated.map(d => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
-          <span>${d.title}</span>
-          <span style="color:var(--text3)">yo ${d.my} · imdb ${d.imdb}</span>
-        </div>`).join('')}
-      </div>
-      <div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Subestimadas por IMDb (yo les puse más)</div>
-        ${underrated.map(d => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
-          <span>${d.title}</span>
-          <span style="color:var(--text3)">yo ${d.my} · imdb ${d.imdb}</span>
-        </div>`).join('')}
-      </div>
-    </div>` : ''}
-  `;
+    ${imdbCard}`;
+}
+
+function renderInsightsForType(type) {
+  const panel = document.getElementById('type-insights-panel');
+  panel.innerHTML = `<div class="insights-grid">${insightsHTML(type)}</div>`;
+}
+
+function renderInsights() {
+  document.getElementById('insights-content').innerHTML = `<div class="insights-grid">${insightsHTML(null)}</div>`;
 }
 
 // ===================== SEARCH MODAL =====================
@@ -2405,7 +2440,7 @@ async function renderTmdbRecs(type) {
         onmouseenter="hoverRecStars(this)" onmouseleave="resetRecStars(${idx})"
         onclick="quickAddRec(event, ${d.id}, '${type}', ${(i+1)*2}, this)">★</span>`
     ).join('');
-    return `<div class="rec-card" onclick="openRecDetail(${d.id}, '${type}')">
+    return `<div class="rec-card" onclick="openRecDetail(event, ${d.id}, '${type}')">
       <img src="${TMDB_IMG}w300${d.poster_path}" alt="${title}" loading="lazy" />
       <div class="rec-score-badge">⭐ ${d.vote_average?.toFixed(1) || '?'}</div>
       ${r.count >= 2 ? `<div class="rec-match">${r.count} coincidencias</div>` : ''}
