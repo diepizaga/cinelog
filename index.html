@@ -984,34 +984,34 @@ select option { background: var(--bg2); color: var(--text); }
     </div>
 
     <!-- FILTERS -->
-    <div id="filters">
-      <span class="filter-label">Ordenar:</span>
-      <select id="filter-sort">
-        <option value="recent">Recientes</option>
-        <option value="my_rating_desc">Mejor calificados</option>
-        <option value="my_rating_asc">Peor calificados</option>
-        <option value="year_desc">Más nuevos</option>
-        <option value="year_asc">Más antiguos</option>
-        <option value="title">A–Z</option>
-      </select>
-      <select id="filter-genre">
-        <option value="">Todos los géneros</option>
-      </select>
-      <select id="filter-decade">
-        <option value="">Todas las décadas</option>
-        <option value="2020">2020s</option>
-        <option value="2010">2010s</option>
-        <option value="2000">2000s</option>
-        <option value="1990">1990s</option>
-        <option value="1980">1980s</option>
-        <option value="old">Antes de 1980</option>
-      </select>
-    </div>
-
     <!-- GRID / INSIGHTS / RECS -->
     <div id="tab-list">
       <!-- Insights panel: visible only on Películas / Series / Libros tabs -->
-      <div id="type-insights-panel" style="display:none;margin-bottom:32px"></div>
+      <div id="type-insights-panel" style="display:none;margin-bottom:24px"></div>
+      <!-- Filters: shown below insights -->
+      <div id="filters">
+        <span class="filter-label">Ordenar:</span>
+        <select id="filter-sort">
+          <option value="recent">Recientes</option>
+          <option value="my_rating_desc">Mejor calificados</option>
+          <option value="my_rating_asc">Peor calificados</option>
+          <option value="year_desc">Más nuevos</option>
+          <option value="year_asc">Más antiguos</option>
+          <option value="title">A–Z</option>
+        </select>
+        <select id="filter-genre">
+          <option value="">Todos los géneros</option>
+        </select>
+        <select id="filter-decade">
+          <option value="">Todas las décadas</option>
+          <option value="2020">2020s</option>
+          <option value="2010">2010s</option>
+          <option value="2000">2000s</option>
+          <option value="1990">1990s</option>
+          <option value="1980">1980s</option>
+          <option value="old">Antes de 1980</option>
+        </select>
+      </div>
       <div id="grid"></div>
       <div id="empty">
         <div class="empty-icon">🎭</div>
@@ -2023,7 +2023,7 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     document.getElementById('tab-list').style.display = isList ? 'block' : 'none';
     document.getElementById('tab-discover').style.display = isDiscover ? 'block' : 'none';
     document.getElementById('tab-compare').style.display = isCompare ? 'block' : 'none';
-    document.getElementById('filters').style.display = isList ? 'flex' : 'none';
+    // filters live inside tab-list now, tab-list visibility handles them
     if (isCompare) renderCompare();
     else renderAll();
   });
