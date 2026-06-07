@@ -2392,7 +2392,7 @@ async function sendMagicLink() {
     const resp = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, create_user: true, options: { emailRedirectTo: 'https://diepizaga.github.io/cinelog/' } })
+      body: JSON.stringify({ email, create_user: true })
     });
     if (resp.ok || resp.status === 200) {
       const sentEl = document.getElementById('auth-sent-email');
